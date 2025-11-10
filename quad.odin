@@ -6,12 +6,13 @@ import glm "core:math/linalg/glsl"
 import gl "vendor:OpenGL"
 
 QuadMesh :: struct {
-	vbo:      u32,
-	vao:      u32,
+	vbo:          u32,
+	vao:          u32,
 	// ebo:      u32,
-	shader:   Shader,
-	vertices: []Vertex,
-	indices:  []u16,
+	shader:       Shader,
+	vertex_count: int,
+	// vertices: []Vertex,
+	// indices:  []u16,
 }
 
 // struct declaration
@@ -22,13 +23,7 @@ Vertex :: struct {
 
 
 make_quad :: proc(s: Shader) -> QuadMesh {
-	m := QuadMesh {
-		shader = s,
-	}
-	gl.GenVertexArrays(1, &m.vao)
-	gl.GenBuffers(1, &m.vbo)
-	// gl.GenBuffers(1, &m.ebo)
-	m.vertices = []Vertex {
+	vertices := []Vertex {
 		{{0.5, 0.5, 0.0}, {0.0, 1.0, 0.0, 1.0}},
 		{{-0.5, 0.5, 0.0}, {1.0, 0.0, 0.0, 1.0}},
 		{{-0.5, -0.5, 0.0}, {1.0, 1.0, 0.0, 1.0}},
@@ -36,12 +31,19 @@ make_quad :: proc(s: Shader) -> QuadMesh {
 		{{-0.5, -0.5, 0.0}, {1.0, 1.0, 0.0, 1.0}},
 		{{0.5, -0.5, 0.0}, {0.0, 0.0, 1.0, 1.0}},
 	}
+	m := QuadMesh {
+		shader       = s,
+		vertex_count = len(vertices),
+	}
+	gl.GenVertexArrays(1, &m.vao)
+	gl.GenBuffers(1, &m.vbo)
+	// gl.GenBuffers(1, &m.ebo)
 	gl.BindVertexArray(m.vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, m.vbo)
 	gl.BufferData(
 		gl.ARRAY_BUFFER,
-		len(m.vertices) * size_of(m.vertices[0]),
-		raw_data(m.vertices),
+		len(vertices) * size_of(vertices[0]),
+		raw_data(vertices),
 		gl.STATIC_DRAW,
 	)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, size_of(Vertex), uintptr(offset_of(Vertex, pos)))
@@ -53,6 +55,7 @@ make_quad :: proc(s: Shader) -> QuadMesh {
 	// gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*size_of(indices[0]), raw_data(indices), gl.STATIC_DRAW)
 
 	gl.BindVertexArray(0)
+	vertices = nil
 	return m
 }
 
@@ -73,5 +76,5 @@ quad_draw :: proc(m: QuadMesh) {
 	shader_use(m.shader)
 	gl.BindVertexArray(m.vao)
 	// gl.BindBuffer(gl.ARRAY_BUFFER, m.vbo)
-	gl.DrawArrays(gl.TRIANGLES, 0, i32(len(m.vertices)))
+	gl.DrawArrays(gl.TRIANGLES, 0, i32(m.vertex_count))
 }
