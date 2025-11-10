@@ -9,22 +9,14 @@ import "core:time"
 import gl "vendor:OpenGL"
 import sdl "vendor:sdl3"
 
-Vec2 :: [2]f32
-Vec3 :: [3]f32
-Vec4 :: [4]f32
-
-Width :: 1280
-Height :: 720
-
-BackgroundColor :: Vec4{0.1, 0.16, 0.25, 1.0}
-
-WindowTitle :: "Voxels"
-
 Game :: struct {
-	isRunning: bool,
-	time:      time.Tick,
-	deltaTime: f64,
-	window:    ^sdl.Window,
+	isRunning:  bool,
+	time:       time.Tick,
+	deltaTime:  f64,
+	window:     ^sdl.Window,
+	quad:       QuadMesh,
+	quadShader: Shader,
+	camera:     Camera,
 }
 
 g: Game
@@ -32,7 +24,9 @@ g: Game
 main :: proc() {
 	context.logger = log.create_console_logger()
 	defer log.destroy_console_logger(context.logger)
-	init_game()
+
+	// TODO arena allocator for temp
+	// TODO tracking allocator
 
 	// Initialize SDL3 video subsystem
 	if !sdl.Init({.VIDEO}) {
@@ -42,13 +36,12 @@ main :: proc() {
 
 	g.window = sdl.CreateWindow(
 		strings.clone_to_cstring(WindowTitle),
-		Width,
-		Height,
+		ScreenWidth,
+		ScreenHeight,
 		{.HIGH_PIXEL_DENSITY, .RESIZABLE, .OPENGL},
 	)
 	if g.window == nil {
-		fmt.printfln("failed to create window")
-		return
+		log.panicf("failed to create window: %s", sdl.GetError())
 	}
 	defer sdl.DestroyWindow(g.window)
 
@@ -63,10 +56,15 @@ main :: proc() {
 	gl.load_up_to(3, 3, sdl.gl_set_proc_address)
 	gl.Enable(gl.DEPTH_TEST | gl.CULL_FACE | gl.BLEND)
 
+	init_game()
+
 	main_loop: for g.isRunning {
+		g.deltaTime = time.duration_seconds(time.tick_since(g.time))
+		g.time = time.tick_now()
+		dt := f32(g.deltaTime)
 		handle_events()
-		update()
-		render()
+		update(dt)
+		render(dt)
 
 		free_all(context.temp_allocator)
 	}
@@ -74,33 +72,46 @@ main :: proc() {
 }
 
 init_game :: proc() {
-	g = {
-		time      = time.tick_now(),
-		isRunning = true,
+	quadShader, sok := load_shader("./shaders/quad.vert", "./shaders/quad.frag")
+	if !sok {
+		log.fatalf("failed to load shaders")
 	}
+	g.time = time.tick_now()
+	g.isRunning = true
+	g.camera = make_camera(PlayerPos, -90, 0)
+	g.quadShader = quadShader
+	g.quad = make_quad(quadShader)
+	input_set_mouse_captured(true)
 }
 
-update :: proc() {
-	g.deltaTime = time.duration_seconds(time.tick_since(g.time))
-	g.time = time.tick_now()
+update :: proc(dt: f32) {
 	windowTitle := strings.clone_to_cstring(
 		fmt.tprintf("%s: FPS %.2f", WindowTitle, 1 / g.deltaTime),
 		context.temp_allocator,
 	)
 	if !sdl.SetWindowTitle(g.window, windowTitle) {
-		log.errorf("failed to set the window title")
+		log.errorf("faiSDL_CaptureMouseled to set the window title")
 	}
+
+	// create the scene
+	camera_update(&g.camera, dt)
+	quad_update(&g.quad, dt)
 }
 
-render :: proc() {
-	gl.Viewport(0, 0, Width, Height)
+render :: proc(dt: f32) {
+	// matrix types in Odin are stored in column-major format but written as you'd normal write them
+	gl.Viewport(0, 0, ScreenWidth, ScreenHeight)
 	gl.ClearColor(BackgroundColor.r, BackgroundColor.g, BackgroundColor.b, BackgroundColor.a)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+	quad_draw(g.quad)
 
 	sdl.GL_SwapWindow(g.window)
 }
 
 handle_events :: proc() {
+	input_begin_frame() // Reset per-frame states (scroll delta)
+
 	event: sdl.Event
 	for sdl.PollEvent(&event) {
 		#partial switch event.type {
@@ -113,6 +124,10 @@ handle_events :: proc() {
 				log.info("Escape pressed, closing window")
 				g.isRunning = false
 			}
+
+		case .MOUSE_WHEEL:
+			input_handle_scroll(event.wheel.y)
 		}
 	}
+	input_update() // Update keyboard and mouse states
 }
