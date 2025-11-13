@@ -40,12 +40,7 @@ make_quad :: proc(s: Shader) -> QuadMesh {
 	// gl.GenBuffers(1, &m.ebo)
 	gl.BindVertexArray(m.vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, m.vbo)
-	gl.BufferData(
-		gl.ARRAY_BUFFER,
-		len(vertices) * size_of(vertices[0]),
-		raw_data(vertices),
-		gl.STATIC_DRAW,
-	)
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(vertices[0]), raw_data(vertices), gl.STATIC_DRAW)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, size_of(Vertex), uintptr(offset_of(Vertex, pos)))
 	gl.EnableVertexAttribArray(0)
 	gl.VertexAttribPointer(1, 4, gl.FLOAT, false, size_of(Vertex), uintptr(offset_of(Vertex, col)))
